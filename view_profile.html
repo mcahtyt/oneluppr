@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kullanıcı Profili</title>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAnsVe9vkaZqjw7rENN4c4o6PoIjpU_Lbg",
+      authDomain: "onelupp.firebaseapp.com",
+      projectId: "onelupp",
+      storageBucket: "onelupp.firebasestorage.app",
+      messagingSenderId: "713515336901",
+      appId: "1:713515336901:web:a916637848a83aa9685cac",
+      measurementId: "G-W7Z4C4SM2L"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const profilePic = document.getElementById('profilePic');
+    const profileUsername = document.getElementById('profileUsername');
+    const profileBio = document.getElementById('profileBio');
+    const followBtn = document.getElementById('followBtn');
+    const messageBtn = document.getElementById('messageBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const messageBox = document.getElementById('messageBox');
+    const messageText = document.getElementById('messageText');
+    const closeMessageBoxBtn = document.getElementById('closeMessageBox');
+
+    function showMessage(msg) {
+      messageText.textContent = msg;
+      messageBox.style.display = 'block';
+    }
+
+    closeMessageBoxBtn.addEventListener('click', () => {
+      messageBox.style.display = 'none';
+    });
+
+    let currentUser = null;
+    let viewedUserId = null;
+    let isFollowing = false;
+
+    // URL'den userId al
+    const params = new URLSearchParams(window.location.search);
+    viewedUserId = params.get('userId');
+
+    async function loadProfile(userId) {
+      if (!userId) {
+        showMessage("Geçersiz kullanıcı ID'si.");
+        return;
+      }
+      try {
+        const userDoc = await getDoc(doc(db, "users", userId));
+        if (!userDoc.exists()) {
+          showMessage("Kullanıcı bulunamadı.");
+          return;
+        }
+        const data = userDoc.data();
+        profilePic.src = data.profilePic || "https://placehold.co/140x140/DBDBDB/262626?text=PP";
+        profileUsername.textContent = data.username || "Bilinmeyen Kullanıcı";
+        profileBio.textContent = data.bio || "Henüz biyografi yok.";
+      } catch (e) {
+        showMessage("Profil yüklenirken hata oluştu.");
+      }
+    }
+
+    async function checkFollow() {
+      if (!currentUser || currentUser.uid === viewedUserId) {
+        followBtn.style.display = 'none';
+        messageBtn.style.display = 'none';
+        return;
+      }
+      followBtn.style.display = 'inline-block';
+      messageBtn.style.display = 'inline-block';
+
+      const currentUserDoc = await getDoc(doc(db, "users", currentUser.uid));
+      const currentUserData = currentUserDoc.data();
+
+      isFollowing = currentUserData?.following?.includes(viewedUserId);
+      followBtn.textContent = isFollowing ? "Takipten Çık" : "Takip Et";
+    }
+
+    followBtn.addEventListener('click', async () => {
+      if (!currentUser) return;
+      const currentUserRef = doc(db, "users", currentUser.uid);
+      const viewedUserRef = doc(db, "users", viewedUserId);
+
+      try {
+        if (isFollowing) {
+          await updateDoc(currentUserRef, { following: arrayRemove(viewedUserId) });
+          await updateDoc(viewedUserRef, { followers: arrayRemove(currentUser.uid) });
+          followBtn.textContent = "Takip Et";
+          isFollowing = false;
+        } else {
+          await updateDoc(currentUserRef, { following: arrayUnion(viewedUserId) });
+          await updateDoc(viewedUserRef, { followers: arrayUnion(currentUser.uid) });
+          followBtn.textContent = "Takipten Çık";
+          isFollowing = true;
+        }
+      } catch (e) {
+        showMessage("Takip işlemi başarısız.");
+      }
+    });
+
+    messageBtn.addEventListener('click', () => {
+      if (!viewedUserId) return;
+      window.location.href = `messages.html?user=${viewedUserId}`;
+    });
+
+    logoutBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        await signOut(auth);
+        showMessage("Çıkış yapıldı. Yönlendiriliyorsunuz...");
+        setTimeout(() => window.location.href = 'index.html', 1500);
+      } catch {
+        showMessage("Çıkış yapılamadı.");
+      }
+    });
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.location.href = 'index.html';
+        return;
+      }
+      currentUser = user;
+      await loadProfile(viewedUserId);
+      await checkFollow();
+    });
+  </script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0; background: #fafafa; color: #262626;
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+    header {
+      background: white;
+      padding: 15px 25px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    header .logo {
+      font-weight: bold; font-size: 1.5em;
+    }
+    header nav a {
+      margin-left: 20px;
+      text-decoration: none;
+      color: #262626;
+      font-weight: 600;
+    }
+    header nav a:hover {
+      color: #0095F6;
+    }
+    main {
+      flex-grow: 1;
+      max-width: 600px;
+      margin: 40px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    img#profilePic {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid #DBDBDB;
+      margin-bottom: 20px;
+    }
+    h1#profileUsername {
+      margin-bottom: 10px;
+    }
+    p#profileBio {
+      color: #8E8E8E;
+      font-size: 1em;
+      margin-bottom: 30px;
+    }
+    button#followBtn, button#messageBtn {
+      padding: 12px 24px;
+      font-size: 1em;
+      font-weight: 600;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      margin: 0 10px;
+      transition: background-color 0.3s ease;
+    }
+    button#followBtn {
+      background-color: #0095F6;
+      color: white;
+    }
+    button#followBtn:hover {
+      background-color: #007ACC;
+    }
+    button#messageBtn {
+      background-color: transparent;
+      color: #0095F6;
+      border: 2px solid #0095F6;
+    }
+    button#messageBtn:hover {
+      background-color: #0095F6;
+      color: white;
+    }
+    footer {
+      text-align: center;
+      padding: 15px;
+      color: #8E8E8E;
+      font-size: 0.9em;
+      border-top: 1px solid #DBDBDB;
+      margin-top: auto;
+    }
+    /* Mesaj kutusu */
+    #messageBox {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 25px 35px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      z-index: 1000;
+      text-align: center;
+      font-size: 1.1em;
+    }
+    #messageBox button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1em;
+      background-color: #0095F6;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #messageBox button:hover {
+      background-color: #007ACC;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Sosyal Medyam</div>
+    <nav>
+      <a href="home.html">Akış</a>
+      <a href="explore.html">Keşfet</a>
+      <a href="upload.html">Gönderi Oluştur</a>
+      <a href="messages.html">Mesajlar</a>
+      <a href="profile.html">Profilim</a>
+      <a href="#" id="logoutBtn">Çıkış Yap</a>
+    </nav>
+  </header>
+
+  <main>
+    <img id="profilePic" src="https://placehold.co/140x140/DBDBDB/262626?text=PP" alt="Profil Resmi" />
+    <h1 id="profileUsername">Kullanıcı Adı</h1>
+    <p id="profileBio">Biyografi burada görüntülenecek.</p>
+
+    <div>
+      <button id="followBtn">Takip Et</button>
+      <button id="messageBtn">Mesaj Yaz</button>
+    </div>
+  </main>
+
+  <footer>
+    &copy; 2025 Sosyal Medyam. Tüm Hakları Saklıdır.
+  </footer>
+
+  <div id="messageBox">
+    <p id="messageText"></p>
+    <button id="closeMessageBox">Tamam</button>
+  </div>
+</body>
+</html>
